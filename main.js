@@ -14,13 +14,15 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 camera.position.z = 10;
 
-const landscape = new THREE.PlaneGeometry(30.0, 20.0, 10, 10);
+const landscape = new THREE.BoxGeometry(5,5,5);
 const landscapingMaterials = new THREE.MeshBasicMaterial({
-  color: 0xffff00,
-  side: THREE.DoubleSide,
+  color: 0x0fff00
 });
 
 const fullLandscaping = new THREE.Mesh(landscape, landscapingMaterials);
+
+fullLandscaping.rotation.set(360,3.5,80);
+
 
 scene.add(fullLandscaping);
 
@@ -42,10 +44,12 @@ document.addEventListener("mousemove", (event) => {
     const x = event.clientX - mouseCords.x;
     const y = event.clientY - mouseCords.y;
     
+    // if (x < 0) { return 0 }
+    // if (y < 0) { return 0 }
 
-    fullLandscaping.rotation.y += x * 0.00001
-    fullLandscaping.rotation.x += y * 0.00001
-    fullLandscaping.rotation.z += z * 0.00001
+    fullLandscaping.rotation.y += x * 0.0001
+    fullLandscaping.rotation.x += y * 0.0001
+    fullLandscaping.rotation.z += z * 0.0001
 
     mouseCords.y = event.clientX;
     mouseCords.x = event.clientY;
