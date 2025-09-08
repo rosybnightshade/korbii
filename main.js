@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { materialLineWidth } from "three/tsl";
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xFCDCF4);
 const camera = new THREE.PerspectiveCamera(
   100,
   window.innerWidth / window.innerHeight,
@@ -16,13 +18,18 @@ camera.position.z = 10;
 
 const landscape = new THREE.BoxGeometry(5,5,5);
 const landscapingMaterials = new THREE.MeshBasicMaterial({
-  color: 0x0fff00
+  color: 0x033305
 });
 
 const fullLandscaping = new THREE.Mesh(landscape, landscapingMaterials);
 
 fullLandscaping.rotation.set(360,3.5,80);
 
+const landscapeBorder = new THREE.EdgesGeometry(landscape);
+const segmantedBorder = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2});
+const border = new THREE.LineSegments( landscapeBorder, segmantedBorder );
+
+fullLandscaping.add(border);
 
 scene.add(fullLandscaping);
 
@@ -43,9 +50,6 @@ document.addEventListener("mousemove", (event) => {
 
     const x = event.clientX - mouseCords.x;
     const y = event.clientY - mouseCords.y;
-    
-    // if (x < 0) { return 0 }
-    // if (y < 0) { return 0 }
 
     fullLandscaping.rotation.y += x * 0.0001
     fullLandscaping.rotation.x += y * 0.0001
@@ -61,18 +65,36 @@ document.addEventListener("mouseup", (event) => {
 
 console.log(isDragging)
 
-const titleRenderer = new CSS2DRenderer();
-titleRenderer.setSize(window.innerWidth, window.innerHeight);
-titleRenderer.domElement.classList.add("title-renderer");
-document.body.appendChild(titleRenderer.domElement);
+class Korbitat {
+  constructor(ability, numberofkorbiis, stardust) {
+    this.ability = ability;
+    this.numberofkorbiis = numberofkorbiis;
+    this.stardust = stardust;
 
-const title = document.createElement('div');
-title.className = 'title';
-title.textContent = 'Korbii\'s Tycoon!';
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+    this.mesh = new THREE.Mesh(geometry, material);
 
-const KorbiisTycoon = new CSS2DObject(title);
-KorbiisTycoon.position.set(0,1,0)
-fullLandscaping.add(KorbiisTycoon)
+    const boxSize = 2.5; 
+    const face = Math.floor(Math.random() * 6);
+    let pos = [0, 0, 0];
+
+    switch (face) {
+      case 0: pos = [boxSize, Math.random() * 5 - 2.5, Math.random() * 5 - 2.5]; break; // +X
+      case 1: pos = [-boxSize, Math.random() * 5 - 2.5, Math.random() * 5 - 2.5]; break; // -X
+      case 2: pos = [Math.random() * 5 - 2.5, boxSize, Math.random() * 5 - 2.5]; break; // +Y
+      case 3: pos = [Math.random() * 5 - 2.5, -boxSize, Math.random() * 5 - 2.5]; break; // -Y
+      case 4: pos = [Math.random() * 5 - 2.5, Math.random() * 5 - 2.5, boxSize]; break; // +Z
+      case 5: pos = [Math.random() * 5 - 2.5, Math.random() * 5 - 2.5, -boxSize]; break; // -Z
+    }
+
+    this.mesh.position.set(...pos);
+
+    fullLandscaping.add(this.mesh);
+  }
+}
+
+let storeNormalKorbitat = new Korbitat("normal", 0, 0);
 
 function render() {
     requestAnimationFrame(render);
