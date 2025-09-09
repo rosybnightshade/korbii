@@ -31,6 +31,13 @@ const border = new THREE.LineSegments( landscapeBorder, segmantedBorder );
 
 fullLandscaping.add(border);
 
+const fullBoxContainer = new THREE.Group();
+scene.add(fullBoxContainer);
+
+const landscapeFront = new THREE.GridHelper(10,10);
+landscapeFront.rotation.z = 0;
+fullBoxContainer.add(landscapeFront);
+
 scene.add(fullLandscaping);
 
 // draggable plane
