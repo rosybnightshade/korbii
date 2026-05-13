@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  username  String    @unique
+  email     String    @unique
+  password  String
+  ipAddress String?
+  port      Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // relations
+  participants Participant[]
+  messages     Message[]
+  connections  ConnectionHistory[]
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  name      String?
+  code      Int      @unique @default(dbgenerated("floor(random() * 900000 + 100000)::int"))
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants Participant[]
+  messages     Message[]
+}
+
+model Participant {
+  id             String       @id @default(uuid())
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  joinedAt       DateTime     @default(now())
+  isAdmin        Boolean      @default(false)
+
+  @@unique([userId, conversationId])
+  @@index([conversationId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  sender         User         @relation(fields: [senderId], references: [id])
+  senderId       String
+
+  content   String
+  type      MessageType @default(TEXT)
+  createdAt DateTime    @default(now())
+  editedAt  DateTime?
+  deleted   Boolean     @default(false)
+
+  @@index([conversationId, createdAt])
+}
+
+model ConnectionHistory {
+  id             String    @id @default(uuid())
+  user           User      @relation(fields: [userId], references: [id])
+  userId         String
+  ip             String
+  port           Int?
+  peerIp         String?
+  peerPort       Int?
+  connectedAt    DateTime  @default(now())
+  disconnectedAt DateTime?
+  successful     Boolean   @default(true)
+  note           String?
+
+  @@index([userId, connectedAt])
+}

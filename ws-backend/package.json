@@ -1,0 +1,29 @@
+{
+    "type": "module",
+    "scripts": {
+        "dev:studio": "concurrently \"node index.js\"  \"npm run db:studio\"",
+        "dev": "node index.js",
+        "db:migrate": "npx prisma migrate dev",
+        "db:reset": "npx prisma migrate reset",
+        "db:studio": "npx prisma studio",
+        "db:seed": "npx prisma db seed",
+        "db:generate": "npx prisma generate",
+        "db:push": "npx prisma db push"
+    },
+    "dependencies": {
+        "@prisma/adapter-pg": "^7.8.0",
+        "@prisma/client": "^7.8.0",
+        "body-parser": "^2.2.2",
+        "cors": "^2.8.6",
+        "dotenv": "^17.4.2",
+        "express": "^5.2.1",
+        "fs": "^0.0.1-security",
+        "http": "^0.0.1-security",
+        "pg": "^8.20.0",
+        "ws": "^8.20.0"
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1",
+        "prisma": "^7.8.0"
+    }
+}
