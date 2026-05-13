@@ -20,6 +20,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 camera.position.z = 10;
 
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+dirLight.position.set(10, 10, 20);
+scene.add(dirLight);
+
 const landscape = new THREE.BoxGeometry(5, 5, 5);
 const landscapingMaterials = new THREE.MeshBasicMaterial({
   transparent: true,
@@ -66,7 +73,7 @@ landscapingGrid.add(gridBottom);
 
 const gridRight = new THREE.GridHelper(gridsize, griddivs);
 gridRight.position.y = 2.8;
-gridRight.rotation.z =
+// gridRight.rotation.z =
 landscapingGrid.add(gridRight);
 
 fullLandscaping.add(landscapingGrid);
@@ -101,16 +108,24 @@ document.addEventListener("mouseup", (event) => {
   isDragging = false;
 });
 
-const Korbii = new GLTFLoader();
-Korbii.load("Korbii-prototype.glb", (glft) => {
-  fullLandscaping.add(glft.scene)
-  glft.rotation.y = Math.PI;
-  const light = new THREE.AmbientLight(0x404040); // soft white light
-  fullLandscaping.add(light);
-}, undefined, (error) => {
-  console.error(error);
-})
-  ;
+const KorbiiLoader = new GLTFLoader();
+KorbiiLoader.load(
+  "Korbii-prototype.glb",
+  (gltf) => {
+    const Korbii = gltf.scene;
+
+    Korbii.rotation.y = Math.PI;
+    Korbii.position.y = 2.5 + 0.5;
+    Korbii.scale.set(0.3, 0.3, 0.3);
+
+    fullLandscaping.add(Korbii);
+  },
+  undefined,
+  (error) => {
+    console.error(error);
+  },
+);
+
 console.log(isDragging);
 
 class Korbitat {
@@ -135,9 +150,13 @@ class Korbitat {
 
 let storeNormalKorbitat = new Korbitat("normal", 0, 0);
 
+const korbiiCubeGroup = new THREE.Group();
+scene.add(korbiiCubeGroup);
+korbiiCubeGroup.add(fullLandscaping);
+
 function render() {
   requestAnimationFrame(render);
   renderer.render(scene, camera);
-  titleRenderer.render(scene, camera);
+  // titleRenderer.render(scene, camera);
 }
 render();
