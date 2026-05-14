@@ -6,6 +6,8 @@ import {
 import { materialLineWidth } from "three/tsl";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+let mixer;
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xfcdcf4);
 const camera = new THREE.PerspectiveCamera(
@@ -19,6 +21,8 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 camera.position.z = 10;
+
+const clock = new THREE.Clock();
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
@@ -73,7 +77,6 @@ landscapingGrid.add(gridBottom);
 
 const gridRight = new THREE.GridHelper(gridsize, griddivs);
 gridRight.position.y = 2.8;
-// gridRight.rotation.z =
 landscapingGrid.add(gridRight);
 
 fullLandscaping.add(landscapingGrid);
@@ -98,7 +101,6 @@ document.addEventListener("mousemove", (event) => {
 
   fullLandscaping.rotation.y += x * 0.0001;
   fullLandscaping.rotation.x += y * 0.0001;
-  fullLandscaping.rotation.z += z * 0.0001;
 
   mouseCords.y = event.clientX;
   mouseCords.x = event.clientY;
@@ -115,8 +117,17 @@ KorbiiLoader.load(
     const Korbii = gltf.scene;
 
     Korbii.rotation.y = Math.PI;
-    Korbii.position.y = 2.5 + 0.5;
+    Korbii.position.y = 0.05 + 0.05;
     Korbii.scale.set(0.3, 0.3, 0.3);
+
+    mixer = new THREE.AnimationMixer(Korbii);
+    const clips = gltf.animations;
+    console.log("animations found:", gltf.animations);
+    if (clips && clips.length > 0) {
+      const action = mixer.clipAction(clips[0]);
+      action.play();
+    }
+
 
     fullLandscaping.add(Korbii);
   },
@@ -125,6 +136,7 @@ KorbiiLoader.load(
     console.error(error);
   },
 );
+
 
 console.log(isDragging);
 
@@ -156,7 +168,8 @@ korbiiCubeGroup.add(fullLandscaping);
 
 function render() {
   requestAnimationFrame(render);
+  const del = clock.getDelta()
+  if (mixer) mixer.update(del);
   renderer.render(scene, camera);
-  // titleRenderer.render(scene, camera);
 }
 render();
