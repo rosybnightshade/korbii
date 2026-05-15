@@ -3,7 +3,6 @@ import {
   CSS2DRenderer,
   CSS2DObject,
 } from "three/addons/renderers/CSS2DRenderer.js";
-import { materialLineWidth } from "three/tsl";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 let mixer;
@@ -14,7 +13,7 @@ const camera = new THREE.PerspectiveCamera(
   100,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  1000,
 );
 
 const renderer = new THREE.WebGLRenderer();
@@ -35,11 +34,10 @@ const landscape = new THREE.BoxGeometry(5, 5, 5);
 const landscapingMaterials = new THREE.MeshBasicMaterial({
   transparent: true,
   color: 0xffffff,
-  opacity: 0.5
+  opacity: 0.5,
 });
 
 const fullLandscaping = new THREE.Mesh(landscape, landscapingMaterials);
-
 fullLandscaping.rotation.set(360, 3.5, 80);
 
 const landscapeBorder = new THREE.EdgesGeometry(landscape);
@@ -48,7 +46,6 @@ const segmantedBorder = new THREE.LineBasicMaterial({
   linewidth: 2,
 });
 const border = new THREE.LineSegments(landscapeBorder, segmantedBorder);
-
 fullLandscaping.add(border);
 
 // landscaping grid
@@ -82,12 +79,11 @@ landscapingGrid.add(gridRight);
 fullLandscaping.add(landscapingGrid);
 scene.add(fullLandscaping);
 
-// draggable plane
+// ─── Drag to rotate ───────────────────────────────────────────────────────────
 let isDragging = false;
-let mouseCords = { x: 0, y: 0, z: 0 };
+let mouseCords = { x: 0, y: 0 };
 
 document.addEventListener("mousedown", (event) => {
-  console.log("down");
   isDragging = true;
   mouseCords.x = event.clientX;
   mouseCords.y = event.clientY;
@@ -96,59 +92,61 @@ document.addEventListener("mousedown", (event) => {
 document.addEventListener("mousemove", (event) => {
   if (!isDragging) return;
 
-  const x = event.clientX - mouseCords.x;
-  const y = event.clientY - mouseCords.y;
+  const dx = event.clientX - mouseCords.x;
+  const dy = event.clientY - mouseCords.y;
 
-  fullLandscaping.rotation.y += x * 0.0001;
-  fullLandscaping.rotation.x += y * 0.0001;
+  fullLandscaping.rotation.y += dx * 0.01;
+  fullLandscaping.rotation.x += dy * 0.01;
 
-  mouseCords.y = event.clientX;
-  mouseCords.x = event.clientY;
+  // FIX: was swapped — clientX goes to .x, clientY goes to .y
+  mouseCords.x = event.clientX;
+  mouseCords.y = event.clientY;
 });
 
-document.addEventListener("mouseup", (event) => {
+document.addEventListener("mouseup", () => {
   isDragging = false;
 });
 
+// ─── Korbii ───────────────────────────────────────────────────────────────────
 let korbiiMesh = null;
 let korbiiAngle = 0;
-const korbiiYOffset = 2.5 * 0.3 + 0.15; // y offset for standing on top
+
+// The cleaned GLB has an Armature node with internal scale ~4.15.
+// With JS scale of 0.3 applied on top: effective scale = 4.15 * 0.3 = 1.245.
+// The mesh foot sits at Y = -1 in Armature local space → -1.245 in world space.
+// The cube top face is at Y = +2.5 (cube half-height) in cube local space.
+// Lift the path group by 2.5 + 1.245 = 3.745 to place feet flush on the face.
+const korbiiYOffset = gridFront.position.y;
+
 let korbiiPathGroup = null;
 
 const KorbiiLoader = new GLTFLoader();
 KorbiiLoader.load(
-  "Korbii-prototype.glb",
+  "newkorb.glb",
   (gltf) => {
     const Korbii = gltf.scene;
     Korbii.rotation.y = Math.PI;
-    Korbii.position.set(0, korbiiYOffset, 0);
+    Korbii.position.set(0, 0, 0);
     Korbii.scale.set(0.3, 0.3, 0.3);
 
-    mixer = new THREE.AnimationMixer(Korbii);
-    const clips = gltf.animations;
-    console.log("animations found:", gltf.animations);
-    if (clips && clips.length > 0) {
-      const action = mixer.clipAction(clips[0]);
-      action.loop = THREE.LoopRepeat;
-      action.play();
-    }
+    // The original GLB's only animation was a Blender path-follow bake
+    // (BézierCircle.002Action on the Empty node) — that's what caused the orbit.
+    // It has been stripped from Korbii-prototype.glb, so no mixer is needed.
+    // Wire up mixer here when a proper walk-cycle animation is added.
 
     korbiiMesh = Korbii;
-    // Create a group to move Korbii along the path, parented to the cube
+
     korbiiPathGroup = new THREE.Group();
-    korbiiPathGroup.position.set(0, 0, 0);
     korbiiPathGroup.add(Korbii);
     fullLandscaping.add(korbiiPathGroup);
   },
   undefined,
   (error) => {
-    console.error(error);
+    console.error("GLB load error:", error);
   },
 );
 
-
-console.log(isDragging);
-
+// ─── Korbitat ─────────────────────────────────────────────────────────────────
 class Korbitat {
   constructor(ability, numberofkorbiis, stardust) {
     this.ability = ability;
@@ -158,13 +156,7 @@ class Korbitat {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshBasicMaterial({ color: 0xffd700 });
     this.mesh = new THREE.Mesh(geometry, material);
-
-    const boxSize = 2.5;
-    const face = Math.floor(Math.random() * 6);
-    let pos = [0, 0, 0];
-
-    this.mesh.position.set(...pos);
-
+    this.mesh.position.set(0, 0, 0);
     fullLandscaping.add(this.mesh);
   }
 }
@@ -175,52 +167,60 @@ const korbiiCubeGroup = new THREE.Group();
 scene.add(korbiiCubeGroup);
 korbiiCubeGroup.add(fullLandscaping);
 
+// ─── Render loop ──────────────────────────────────────────────────────────────
 function render() {
   requestAnimationFrame(render);
   const del = clock.getDelta();
   if (mixer) mixer.update(del);
 
+  // Walk Korbii in a square on the top face of the cube (cube-local space).
   if (korbiiMesh && korbiiPathGroup) {
-    const side = 4;
+    const side = 4.5;
     const speed = 1.2;
     korbiiAngle += del * speed;
     const perimeter = side * 4;
     let dist = (korbiiAngle * side) % perimeter;
-    let x = 0, z = 0, rot = 0;
+    let x = 0,
+      z = 0,
+      rot = 0;
     const cornerBlend = 0.18;
+
     if (dist < side) {
-      x = -side/2 + dist;
-      z = -side/2;
+      x = -side / 2 + dist;
+      z = -side / 2;
       rot = 0;
       if (dist > side - cornerBlend) {
-        const blendT = (dist - (side - cornerBlend)) / cornerBlend;
-        rot = blendT * (Math.PI / 2);
+        rot = ((dist - (side - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     } else if (dist < side * 2) {
-      x = side/2;
-      z = -side/2 + (dist - side);
+      x = side / 2;
+      z = -side / 2 + (dist - side);
       rot = Math.PI / 2;
       if (dist > side * 2 - cornerBlend) {
-        const blendT = (dist - (side * 2 - cornerBlend)) / cornerBlend;
-        rot = Math.PI / 2 + blendT * (Math.PI / 2);
+        rot =
+          Math.PI / 2 +
+          ((dist - (side * 2 - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     } else if (dist < side * 3) {
-      x = side/2 - (dist - side * 2);
-      z = side/2;
+      x = side / 2 - (dist - side * 2);
+      z = side / 2;
       rot = Math.PI;
       if (dist > side * 3 - cornerBlend) {
-        const blendT = (dist - (side * 3 - cornerBlend)) / cornerBlend;
-        rot = Math.PI + blendT * (Math.PI / 2);
+        rot =
+          Math.PI +
+          ((dist - (side * 3 - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     } else {
-      x = -side/2;
-      z = side/2 - (dist - side * 3);
+      x = -side / 2;
+      z = side / 2 - (dist - side * 3);
       rot = -Math.PI / 2;
       if (dist > perimeter - cornerBlend) {
-        const blendT = (dist - (perimeter - cornerBlend)) / cornerBlend;
-        rot = -Math.PI / 2 + blendT * (Math.PI / 2);
+        rot =
+          -Math.PI / 2 +
+          ((dist - (perimeter - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     }
+
     korbiiPathGroup.position.set(x, korbiiYOffset, z);
     korbiiMesh.rotation.y = rot;
   }
