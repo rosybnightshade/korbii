@@ -9,7 +9,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 let mixer;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xfcdcf4);
+scene.background = new THREE.Color(0x1484CD);
 const camera = new THREE.PerspectiveCamera(
   100,
   window.innerWidth / window.innerHeight,
@@ -18,7 +18,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(window.innerWidth - 5, window.innerHeight - 5);
 document.body.appendChild(renderer.domElement);
 camera.position.z = 10;
 
@@ -33,8 +33,8 @@ scene.add(dirLight);
 
 const landscape = new THREE.BoxGeometry(5, 5, 5);
 const landscapingMaterials = new THREE.MeshBasicMaterial({
-  transparent: true,
-  color: 0xffffff,
+  transparent: false,
+  color: 0x2E6F40,
   opacity: 0.5
 });
 
@@ -112,16 +112,16 @@ document.addEventListener("mouseup", (event) => {
 
 let korbiiMesh = null;
 let korbiiAngle = 0;
-const korbiiYOffset = 2.5 * 0.3 + 0.15; // y offset for standing on top
+const korbiiYOffset = gridFront.position.y; // y offset for standing on top
 let korbiiPathGroup = null;
 
 const KorbiiLoader = new GLTFLoader();
 KorbiiLoader.load(
-  "Korbii-prototype.glb",
+  "newkorb.glb",
   (gltf) => {
     const Korbii = gltf.scene;
     Korbii.rotation.y = Math.PI;
-    Korbii.position.set(0, korbiiYOffset, 0);
+    Korbii.position.set(0, 0, 0);
     Korbii.scale.set(0.3, 0.3, 0.3);
 
     mixer = new THREE.AnimationMixer(Korbii);
@@ -180,47 +180,54 @@ function render() {
   const del = clock.getDelta();
   if (mixer) mixer.update(del);
 
+  // Walk Korbii in a square on the top face of the cube (cube-local space).
   if (korbiiMesh && korbiiPathGroup) {
-    const side = 4;
+    const side = 4.5;
     const speed = 1.2;
     korbiiAngle += del * speed;
     const perimeter = side * 4;
     let dist = (korbiiAngle * side) % perimeter;
-    let x = 0, z = 0, rot = 0;
+    let x = 0,
+      z = 0,
+      rot = 0;
     const cornerBlend = 0.18;
+
     if (dist < side) {
-      x = -side/2 + dist;
-      z = -side/2;
+      x = -side / 2 + dist;
+      z = -side / 2;
       rot = 0;
       if (dist > side - cornerBlend) {
-        const blendT = (dist - (side - cornerBlend)) / cornerBlend;
-        rot = blendT * (Math.PI / 2);
+        rot = ((dist - (side - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     } else if (dist < side * 2) {
-      x = side/2;
-      z = -side/2 + (dist - side);
+      x = side / 2;
+      z = -side / 2 + (dist - side);
       rot = Math.PI / 2;
       if (dist > side * 2 - cornerBlend) {
-        const blendT = (dist - (side * 2 - cornerBlend)) / cornerBlend;
-        rot = Math.PI / 2 + blendT * (Math.PI / 2);
+        rot =
+          Math.PI / 2 +
+          ((dist - (side * 2 - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     } else if (dist < side * 3) {
-      x = side/2 - (dist - side * 2);
-      z = side/2;
+      x = side / 2 - (dist - side * 2);
+      z = side / 2;
       rot = Math.PI;
       if (dist > side * 3 - cornerBlend) {
-        const blendT = (dist - (side * 3 - cornerBlend)) / cornerBlend;
-        rot = Math.PI + blendT * (Math.PI / 2);
+        rot =
+          Math.PI +
+          ((dist - (side * 3 - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     } else {
-      x = -side/2;
-      z = side/2 - (dist - side * 3);
+      x = -side / 2;
+      z = side / 2 - (dist - side * 3);
       rot = -Math.PI / 2;
       if (dist > perimeter - cornerBlend) {
-        const blendT = (dist - (perimeter - cornerBlend)) / cornerBlend;
-        rot = -Math.PI / 2 + blendT * (Math.PI / 2);
+        rot =
+          -Math.PI / 2 +
+          ((dist - (perimeter - cornerBlend)) / cornerBlend) * (Math.PI / 2);
       }
     }
+
     korbiiPathGroup.position.set(x, korbiiYOffset, z);
     korbiiMesh.rotation.y = rot;
   }
