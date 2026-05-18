@@ -1,24 +1,342 @@
-body, html {
-  background-color: #1484CD;
+body,
+html {
+    background-color: #1484cd;
 }
 .title {
-  color: white;
-  font-family: 'Arial', sans-serif;
-  font-size: 24px;
-  font-weight: bold;
-  text-shadow: 0 0 5px rgba(0,0,0,0.7);
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-  white-space: nowrap;
+    color: white;
+    font-family: "Arial", sans-serif;
+    font-size: 24px;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    white-space: nowrap;
 }
 .title-renderer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
 
+#chatbox {
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    background-color: #964b00;
+    color: #f7efe2;
+    padding: 15px;
+    border-radius: 12px;
+    width: 300px;
+    max-width: 300px;
+    height: 500px;
+}
+
+#chatbox-details {
+    text-align: center;
+    font-weight: bold;
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+    border-bottom: black 1px solid;
+}
+
+#chatbox-details-roomname {
+    font-size: 1.3em;
+    margin: 0;
+}
+
+#chatbox-details-roomcode {
+    font-size: 1.2em;
+    margin: 0;
+}
+
+#chatbox-chats {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 15px;
+    overflow-y: auto;
+}
+
+.chatbox-chats-chat-foreign {
+    text-align: left;
+}
+
+.chatbox-chats-chat-local {
+    text-align: right;
+}
+
+.chatbox-chats-username {
+    font-weight: bold;
+    margin: 0;
+}
+
+.chatbox-chats-content {
+    margin: 0;
+}
+
+#chatbox-input {
+    margin-top: calc(100% - 30px);
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+}
+#chatbox-input-input {
+    width: 75%;
+    border-radius: 15px;
+    font-size: 15px;
+    padding: 7px;
+    border: none;
+}
+#chatbox-input-btn {
+    width: 19%;
+    font-size: 15px;
+    border-radius: 15px;
+    padding: 5px;
+    border: none;
+    background-color: #6fa3d9;
+    color: black;
+    font-weight: bold;
+}
+
+/* AUTH & ROOM SCREENS CSS - Drop in without replacing existing code */
+
+.screen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.screen-overlay.hidden {
+    display: none;
+}
+
+.screen-container {
+    background-color: #964b00;
+    color: #f7efe2;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    max-width: 400px;
+    width: 90%;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.screen-title {
+    color: white;
+    font-family: "Arial", sans-serif;
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+    margin: 0 0 30px 0;
+    text-align: center;
+}
+
+/* Auth Container */
+.auth-container {
+    min-height: 400px;
+}
+
+/* Room Container */
+.room-container {
+    min-height: 350px;
+}
+
+.room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.room-header .screen-title {
+    margin: 0;
+    font-size: 24px;
+}
+
+/* Forms */
+.auth-form,
+.room-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.auth-form.hidden,
+.room-form:not(.active-tab) {
+    display: none;
+}
+
+.auth-form h2,
+.room-form h2 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    color: #f7efe2;
+}
+
+/* Inputs */
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    background-color: #f7efe2;
+    color: #333;
+    font-family: "Arial", sans-serif;
+}
+
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder {
+    color: #999;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
+    outline: none;
+    box-shadow: 0 0 8px rgba(111, 163, 217, 0.6);
+}
+
+/* Buttons */
+.btn {
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    font-family: "Arial", sans-serif;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background-color: #6fa3d9;
+    color: black;
+    width: 100%;
+}
+
+.btn-primary:hover {
+    background-color: #5a8cbf;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background-color: #d97e6f;
+    color: #f7efe2;
+}
+
+.btn-secondary:hover {
+    background-color: #c96b5d;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-small {
+    padding: 8px 12px;
+    font-size: 12px;
+    width: auto;
+}
+
+/* Form Toggle */
+.form-toggle {
+    text-align: center;
+    margin: 10px 0 0 0;
+    font-size: 13px;
+    color: #f7efe2;
+}
+
+.form-toggle a {
+    color: #6fa3d9;
+    text-decoration: none;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.form-toggle a:hover {
+    text-decoration: underline;
+}
+
+/* Room Tabs */
+.room-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid rgba(247, 239, 226, 0.2);
+}
+
+.room-tab {
+    flex: 1;
+    padding: 10px;
+    background: none;
+    border: none;
+    color: #f7efe2;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.room-tab:hover {
+    color: #ffffff;
+}
+
+.room-tab.active {
+    border-bottom-color: #6fa3d9;
+    color: #6fa3d9;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .screen-container {
+        padding: 30px;
+        max-width: 95%;
+    }
+    
+    .screen-title {
+        font-size: 24px;
+    }
+    
+    .room-header {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .room-header .screen-title {
+        width: 100%;
+    }
+    
+    #logout-btn {
+        width: 100%;
+    }
 }

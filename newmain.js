@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
-  CSS2DRenderer,
-  CSS2DObject,
+    CSS2DRenderer,
+    CSS2DObject,
 } from "three/addons/renderers/CSS2DRenderer.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -10,10 +10,10 @@ let mixer;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xfcdcf4);
 const camera = new THREE.PerspectiveCamera(
-  100,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000,
+    100,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000,
 );
 
 const renderer = new THREE.WebGLRenderer();
@@ -32,9 +32,9 @@ scene.add(dirLight);
 
 const landscape = new THREE.BoxGeometry(5, 5, 5);
 const landscapingMaterials = new THREE.MeshBasicMaterial({
-  transparent: true,
-  color: 0xffffff,
-  opacity: 0.5,
+    transparent: true,
+    color: 0xffffff,
+    opacity: 0.5,
 });
 
 const fullLandscaping = new THREE.Mesh(landscape, landscapingMaterials);
@@ -42,8 +42,8 @@ fullLandscaping.rotation.set(360, 3.5, 80);
 
 const landscapeBorder = new THREE.EdgesGeometry(landscape);
 const segmantedBorder = new THREE.LineBasicMaterial({
-  color: 0xffffff,
-  linewidth: 2,
+    color: 0xffffff,
+    linewidth: 2,
 });
 const border = new THREE.LineSegments(landscapeBorder, segmantedBorder);
 fullLandscaping.add(border);
@@ -84,27 +84,27 @@ let isDragging = false;
 let mouseCords = { x: 0, y: 0 };
 
 document.addEventListener("mousedown", (event) => {
-  isDragging = true;
-  mouseCords.x = event.clientX;
-  mouseCords.y = event.clientY;
+    isDragging = true;
+    mouseCords.x = event.clientX;
+    mouseCords.y = event.clientY;
 });
 
 document.addEventListener("mousemove", (event) => {
-  if (!isDragging) return;
+    if (!isDragging) return;
 
-  const dx = event.clientX - mouseCords.x;
-  const dy = event.clientY - mouseCords.y;
+    const dx = event.clientX - mouseCords.x;
+    const dy = event.clientY - mouseCords.y;
 
-  fullLandscaping.rotation.y += dx * 0.01;
-  fullLandscaping.rotation.x += dy * 0.01;
+    fullLandscaping.rotation.y += dx * 0.01;
+    fullLandscaping.rotation.x += dy * 0.01;
 
-  // FIX: was swapped — clientX goes to .x, clientY goes to .y
-  mouseCords.x = event.clientX;
-  mouseCords.y = event.clientY;
+    // FIX: was swapped — clientX goes to .x, clientY goes to .y
+    mouseCords.x = event.clientX;
+    mouseCords.y = event.clientY;
 });
 
 document.addEventListener("mouseup", () => {
-  isDragging = false;
+    isDragging = false;
 });
 
 // ─── Korbii ───────────────────────────────────────────────────────────────────
@@ -122,43 +122,43 @@ let korbiiPathGroup = null;
 
 const KorbiiLoader = new GLTFLoader();
 KorbiiLoader.load(
-  "newkorb.glb",
-  (gltf) => {
-    const Korbii = gltf.scene;
-    Korbii.rotation.y = Math.PI;
-    Korbii.position.set(0, 0, 0);
-    Korbii.scale.set(0.3, 0.3, 0.3);
+    "newkorb.glb",
+    (gltf) => {
+        const Korbii = gltf.scene;
+        Korbii.rotation.y = Math.PI;
+        Korbii.position.set(0, 0, 0);
+        Korbii.scale.set(0.3, 0.3, 0.3);
 
-    // The original GLB's only animation was a Blender path-follow bake
-    // (BézierCircle.002Action on the Empty node) — that's what caused the orbit.
-    // It has been stripped from Korbii-prototype.glb, so no mixer is needed.
-    // Wire up mixer here when a proper walk-cycle animation is added.
+        // The original GLB's only animation was a Blender path-follow bake
+        // (BézierCircle.002Action on the Empty node) — that's what caused the orbit.
+        // It has been stripped from Korbii-prototype.glb, so no mixer is needed.
+        // Wire up mixer here when a proper walk-cycle animation is added.
 
-    korbiiMesh = Korbii;
+        korbiiMesh = Korbii;
 
-    korbiiPathGroup = new THREE.Group();
-    korbiiPathGroup.add(Korbii);
-    fullLandscaping.add(korbiiPathGroup);
-  },
-  undefined,
-  (error) => {
-    console.error("GLB load error:", error);
-  },
+        korbiiPathGroup = new THREE.Group();
+        korbiiPathGroup.add(Korbii);
+        fullLandscaping.add(korbiiPathGroup);
+    },
+    undefined,
+    (error) => {
+        console.error("GLB load error:", error);
+    },
 );
 
 // ─── Korbitat ─────────────────────────────────────────────────────────────────
 class Korbitat {
-  constructor(ability, numberofkorbiis, stardust) {
-    this.ability = ability;
-    this.numberofkorbiis = numberofkorbiis;
-    this.stardust = stardust;
+    constructor(ability, numberofkorbiis, stardust) {
+        this.ability = ability;
+        this.numberofkorbiis = numberofkorbiis;
+        this.stardust = stardust;
 
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    this.mesh = new THREE.Mesh(geometry, material);
-    this.mesh.position.set(0, 0, 0);
-    fullLandscaping.add(this.mesh);
-  }
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.position.set(0, 0, 0);
+        fullLandscaping.add(this.mesh);
+    }
 }
 
 let storeNormalKorbitat = new Korbitat("normal", 0, 0);
@@ -169,62 +169,67 @@ korbiiCubeGroup.add(fullLandscaping);
 
 // ─── Render loop ──────────────────────────────────────────────────────────────
 function render() {
-  requestAnimationFrame(render);
-  const del = clock.getDelta();
-  if (mixer) mixer.update(del);
+    requestAnimationFrame(render);
+    const del = clock.getDelta();
+    if (mixer) mixer.update(del);
 
-  // Walk Korbii in a square on the top face of the cube (cube-local space).
-  if (korbiiMesh && korbiiPathGroup) {
-    const side = 4.5;
-    const speed = 1.2;
-    korbiiAngle += del * speed;
-    const perimeter = side * 4;
-    let dist = (korbiiAngle * side) % perimeter;
-    let x = 0,
-      z = 0,
-      rot = 0;
-    const cornerBlend = 0.18;
+    // Walk Korbii in a square on the top face of the cube (cube-local space).
+    if (korbiiMesh && korbiiPathGroup) {
+        const side = 4.5;
+        const speed = 1.2;
+        korbiiAngle += del * speed;
+        const perimeter = side * 4;
+        let dist = (korbiiAngle * side) % perimeter;
+        let x = 0,
+            z = 0,
+            rot = 0;
+        const cornerBlend = 0.18;
 
-    if (dist < side) {
-      x = -side / 2 + dist;
-      z = -side / 2;
-      rot = 0;
-      if (dist > side - cornerBlend) {
-        rot = ((dist - (side - cornerBlend)) / cornerBlend) * (Math.PI / 2);
-      }
-    } else if (dist < side * 2) {
-      x = side / 2;
-      z = -side / 2 + (dist - side);
-      rot = Math.PI / 2;
-      if (dist > side * 2 - cornerBlend) {
-        rot =
-          Math.PI / 2 +
-          ((dist - (side * 2 - cornerBlend)) / cornerBlend) * (Math.PI / 2);
-      }
-    } else if (dist < side * 3) {
-      x = side / 2 - (dist - side * 2);
-      z = side / 2;
-      rot = Math.PI;
-      if (dist > side * 3 - cornerBlend) {
-        rot =
-          Math.PI +
-          ((dist - (side * 3 - cornerBlend)) / cornerBlend) * (Math.PI / 2);
-      }
-    } else {
-      x = -side / 2;
-      z = side / 2 - (dist - side * 3);
-      rot = -Math.PI / 2;
-      if (dist > perimeter - cornerBlend) {
-        rot =
-          -Math.PI / 2 +
-          ((dist - (perimeter - cornerBlend)) / cornerBlend) * (Math.PI / 2);
-      }
+        if (dist < side) {
+            x = -side / 2 + dist;
+            z = -side / 2;
+            rot = 0;
+            if (dist > side - cornerBlend) {
+                rot =
+                    ((dist - (side - cornerBlend)) / cornerBlend) *
+                    (Math.PI / 2);
+            }
+        } else if (dist < side * 2) {
+            x = side / 2;
+            z = -side / 2 + (dist - side);
+            rot = Math.PI / 2;
+            if (dist > side * 2 - cornerBlend) {
+                rot =
+                    Math.PI / 2 +
+                    ((dist - (side * 2 - cornerBlend)) / cornerBlend) *
+                        (Math.PI / 2);
+            }
+        } else if (dist < side * 3) {
+            x = side / 2 - (dist - side * 2);
+            z = side / 2;
+            rot = Math.PI;
+            if (dist > side * 3 - cornerBlend) {
+                rot =
+                    Math.PI +
+                    ((dist - (side * 3 - cornerBlend)) / cornerBlend) *
+                        (Math.PI / 2);
+            }
+        } else {
+            x = -side / 2;
+            z = side / 2 - (dist - side * 3);
+            rot = -Math.PI / 2;
+            if (dist > perimeter - cornerBlend) {
+                rot =
+                    -Math.PI / 2 +
+                    ((dist - (perimeter - cornerBlend)) / cornerBlend) *
+                        (Math.PI / 2);
+            }
+        }
+
+        korbiiPathGroup.position.set(x, korbiiYOffset, z);
+        korbiiMesh.rotation.y = rot;
     }
 
-    korbiiPathGroup.position.set(x, korbiiYOffset, z);
-    korbiiMesh.rotation.y = rot;
-  }
-
-  renderer.render(scene, camera);
+    renderer.render(scene, camera);
 }
 render();

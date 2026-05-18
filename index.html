@@ -1,15 +1,110 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Korbii's Tycoon
-    </title>
-    <link rell="stylesheet" href="main.css">
-    <style>
-      body { margin: 0; }
-    </style>
-  </head>
-  <body>
-    <script type="module" src="/main.js"></script>
-  </body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Korbii's Tycoon</title>
+        <link rel="stylesheet" href="main.css" />
+        <style>
+            body {
+                margin: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <script type="module" src="/main.js"></script>
+
+        <div id="chatbox">
+            <div id="chatbox-details">
+                <p id="chatbox-details-roomname">{{Chatroom name}}</p>
+                <p id="chatbox-details-roomcode">{{room code}}</p>
+            </div>
+            <div id="chatbox-chats">
+                <div class="chatbox-chats-chat-foreign">
+                    <p class="chatbox-chats-username">Olivia Schuetz</p>
+                    <p class="chatbox-chats-content">
+                        Hello world, how is the beautiful green grass on this
+                        day? I'm putting a little more content here to see how
+                        it handles overflows.
+                    </p>
+                </div>
+                <div class="chatbox-chats-chat-local">
+                    <p class="chatbox-chats-username">Nicolas Okuly</p>
+                    <p class="chatbox-chats-content">
+                        The grass is green and covered in soft dew.
+                    </p>
+                </div>
+            </div>
+            <div id="chatbox-input">
+                <input
+                    id="chatbox-input-input"
+                    type="text"
+                    placeholder="Type your message here..."
+                    minlength="1"
+                /><button id="chatbox-input-btn">send</button>
+            </div>
+        </div>
+
+        <!-- AUTH & ROOM SCREENS - Drop this in your HTML -->
+
+        <!-- Auth Screen -->
+        <div id="auth-screen" class="screen-overlay">
+            <div class="screen-container auth-container">
+                <h1 class="screen-title">Chat App</h1>
+                
+                <!-- Login Form (shown by default) -->
+                <form id="login-form" class="auth-form">
+                    <h2>Log In</h2>
+                    <input type="email" id="login-email" placeholder="Email" required>
+                    <input type="password" id="login-password" placeholder="Password" required>
+                    <button type="submit" class="btn btn-primary">Log In</button>
+                    <p class="form-toggle">Don't have an account? <a href="#" onclick="toggleAuthForms(event)">Sign up</a></p>
+                </form>
+                
+                <!-- Register Form (hidden by default) -->
+                <form id="register-form" class="auth-form hidden">
+                    <h2>Sign Up</h2>
+                    <input type="text" id="register-username" placeholder="Username" required>
+                    <input type="email" id="register-email" placeholder="Email" required>
+                    <input type="password" id="register-password" placeholder="Password" required>
+                    <button type="submit" class="btn btn-primary">Sign Up</button>
+                    <p class="form-toggle">Already have an account? <a href="#" onclick="toggleAuthForms(event)">Log in</a></p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Room Selection Screen -->
+        <div id="room-screen" class="screen-overlay hidden">
+            <div class="screen-container room-container">
+                <div class="room-header">
+                    <h1 class="screen-title">Select a Room</h1>
+                    <button id="logout-btn" class="btn btn-secondary btn-small">Logout</button>
+                </div>
+                
+                <div class="room-tabs">
+                    <button class="room-tab active" onclick="switchRoomTab(event, 'create')">Create</button>
+                    <button class="room-tab" onclick="switchRoomTab(event, 'join')">Join</button>
+                </div>
+                
+                <!-- Create Room Form -->
+                <form id="create-room-form" class="room-form active-tab">
+                    <h2>Create a New Room</h2>
+                    <input type="text" id="create-roomname" placeholder="Room name" required>
+                    <button type="submit" class="btn btn-primary">Create Room</button>
+                </form>
+                
+                <!-- Join Room Form -->
+                <form id="join-room-form" class="room-form">
+                    <h2>Join a Room</h2>
+                    <input type="text" id="join-roomcode" placeholder="Room code" required>
+                    <button type="submit" class="btn btn-primary">Join Room</button>
+                </form>
+            </div>
+        </div>
+
+        <script src="./clientScripts/chatClient.js"></script>
+        <script src="./clientScripts/chatUi.js"></script>
+        <script src="./clientScripts/screens.js"></script>
+        <script src="./clientScripts/app.js"></script>
+    </body>
 </html>
