@@ -46,13 +46,28 @@ class ChatClient {
                 this.ws.onerror = (error) => {
                     console.error("WebSocket error:", error);
                     if (this.onError) this.onError(error);
-                    reject(error);
+                    // Do not always reject here; only reject if connection hasn't opened yet
+                    if (!this.connected) reject(error);
                 };
 
-                this.ws.onclose = () => {
+                this.ws.onclose = (event) => {
                     this.connected = false;
                     console.log("WebSocket disconnected");
                     if (this.onConnectionChange) this.onConnectionChange(false);
+
+                    // Reject any pending requests so callers don't hang indefinitely
+                    const err = new Error("WebSocket closed");
+                    for (const [
+                        key,
+                        handler,
+                    ] of this.pendingRequests.entries()) {
+                        try {
+                            handler.reject(err);
+                        } catch (e) {
+                            // ignore
+                        }
+                    }
+                    this.pendingRequests.clear();
                 };
             } catch (error) {
                 reject(error);
@@ -68,44 +83,40 @@ class ChatClient {
 
     // ==================== USER AUTH ====================
 
-    async registerUser(username, email, password) {
-        const requestId = this.generateRequestId();
+    async registerUser(username, email, password, name = "") {
+        const response = await this.sendRequest("register", {
+            username,
+            email,
+            password,
+            name: name || username,
+        });
 
-        const payload = {
-            command: "register",
-            id: requestId,
-            body: {
-                username,
-                email,
-                password,
-            },
-        };
-
-        return this.sendAndWaitForResponse(payload, requestId);
-    }
-
-    async loginUser(email, password) {
-        const requestId = this.generateRequestId();
-
-        const payload = {
-            command: "login",
-            id: requestId,
-            body: {
-                email,
-                password,
-            },
-        };
-
-        const response = await this.sendAndWaitForResponse(payload, requestId);
-
-        // Store user data locally if successful
-        if (response && response.id) {
-            this.userId = response.id;
-            this.username = response.username;
+        // Check for success and user object
+        if (response && response.status === "success" && response.user) {
+            this.userId = response.user.id;
+            this.username = response.user.username;
             this.saveUserToLocalStorage();
+            return response.user;
         }
 
-        return response;
+        return null;
+    }
+
+    async loginUser(identifier, password) {
+        const response = await this.sendRequest("login", {
+            identifier,
+            password,
+        });
+
+        // Check for success and user object
+        if (response && response.status === "success" && response.user) {
+            this.userId = response.user.id;
+            this.username = response.user.username;
+            this.saveUserToLocalStorage();
+            return response.user;
+        }
+
+        return null;
     }
 
     // Restore user from localStorage if they were previously logged in
@@ -151,11 +162,13 @@ class ChatClient {
 
         const response = await this.sendAndWaitForResponse(payload, requestId);
 
-        if (response && response.id) {
-            this.currentRoom = response;
-            this.currentRoomId = response.id;
-            this.messages = []; // Clear messages when switching rooms
-            return response;
+        if (response && response.status === "success" && response.room) {
+            this.currentRoom = response.room;
+            // prefer id, fallback to code (match CLI behavior)
+            this.currentRoomId = response.room.id || response.room.code;
+            this.messages = [];
+            console.info("createRoom assigned currentRoomId", this.currentRoomId, "room=", response.room);
+            return response.room;
         }
 
         return null;
@@ -168,17 +181,18 @@ class ChatClient {
             command: "joinRoom",
             id: requestId,
             body: {
-                roomcode,
+                roomcode: Number(roomcode),
             },
         };
 
         const response = await this.sendAndWaitForResponse(payload, requestId);
 
-        if (response && response.id) {
-            this.currentRoom = response;
-            this.currentRoomId = response.id;
-            this.messages = []; // Clear messages when switching rooms
-            return response;
+        if (response && response.status === "success" && response.room) {
+            this.currentRoom = response.room;
+            this.currentRoomId = response.room.id || response.room.code;
+            this.messages = [];
+            console.info("joinRoom assigned currentRoomId", this.currentRoomId, "room=", response.room);
+            return response.room;
         }
 
         return null;
@@ -191,6 +205,35 @@ class ChatClient {
     // ==================== MESSAGING ====================
 
     async sendMessage(text) {
+        console.debug("sendMessage called", {
+            text,
+            connected: this.connected,
+            userId: this.userId,
+            currentRoomId: this.currentRoomId,
+        });
+
+        // Attempt to recover userId from localStorage if missing
+        if (!this.userId) {
+            const stored = this.restoreUserFromLocalStorage();
+            if (stored) {
+                console.info("Recovered user from localStorage", stored.username);
+            }
+        }
+
+        // Attempt to recover currentRoomId from session storage if missing
+        if (!this.currentRoomId) {
+            try {
+                const sess = JSON.parse(localStorage.getItem("chatSession") || "null");
+                if (sess && sess.currentRoom) {
+                    this.currentRoom = sess.currentRoom;
+                    this.currentRoomId = sess.currentRoom.id || sess.currentRoom.code;
+                    console.info("Recovered current room from session", this.currentRoom);
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
         if (!this.userId) {
             console.error("Not logged in");
             return null;
@@ -207,29 +250,78 @@ class ChatClient {
             command: "sendMessage",
             id: requestId,
             body: {
-                text,
-                conversationId: this.currentRoomId,
+                content: text,
+                conversationId: this.currentRoomId || (this.currentRoom && (this.currentRoom.id || this.currentRoom.code)),
                 senderId: this.userId,
             },
         };
 
-        return this.sendAndWaitForResponse(payload, requestId);
+        try {
+            const response = await this.sendAndWaitForResponse(
+                payload,
+                requestId,
+            );
+            console.debug("sendMessage response:", response);
+            if (response && response.status === "success") {
+                return response;
+            }
+            console.warn("sendMessage did not succeed, response:", response);
+            return null;
+        } catch (err) {
+            console.error("sendMessage error:", err);
+            return null;
+        }
     }
 
     async listMessages(limit = 50, offset = 0) {
         const requestId = this.generateRequestId();
 
+        // ensure conversation id is available
+        let conv = this.currentRoomId || (this.currentRoom && (this.currentRoom.id || this.currentRoom.code));
+        if (!conv) {
+            try {
+                const sess = JSON.parse(localStorage.getItem("chatSession") || "null");
+                if (sess && sess.currentRoom) {
+                    conv = sess.currentRoom.id || sess.currentRoom.code;
+                    // also set runtime state
+                    this.currentRoom = sess.currentRoom;
+                    this.currentRoomId = conv;
+                    console.info("listMessages recovered conversationId from session", conv);
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        if (!conv) {
+            console.error("listMessages: no conversationId available, aborting request");
+            return [];
+        }
+
+        console.debug("listMessages called, conversationId=", conv, "limit=", limit, "offset=", offset);
+
         const payload = {
             command: "listMessages",
             id: requestId,
             body: {
-                conversationId: this.currentRoomId,
+                conversationId: conv,
                 limit,
                 offset,
             },
         };
 
-        return this.sendAndWaitForResponse(payload, requestId);
+        const response = await this.sendAndWaitForResponse(payload, requestId);
+
+        if (
+            response &&
+            response.status === "success" &&
+            Array.isArray(response.messages)
+        ) {
+            this.messages = response.messages;
+            return response.messages;
+        }
+
+        return [];
     }
 
     addMessageToLocal(message) {
@@ -243,38 +335,129 @@ class ChatClient {
     // ==================== INTERNAL HELPERS ====================
 
     generateRequestId() {
-        return ++this.requestId;
+        // Match CLI style: string id with timestamp + random suffix
+        return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    // New: consistent request sender (matches CLI): uses string id, checks readyState,
+    // sets per-request timeout and stores resolvers in pendingRequests.
+    async sendRequest(command, body = {}, timeout = 8000) {
+        // ensure websocket open
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            // attempt to connect (will resolve when open) or fail
+            try {
+                await Promise.race([
+                    this.connect(),
+                    new Promise((_, rej) =>
+                        setTimeout(
+                            () => rej(new Error("WS connect timeout")),
+                            timeout,
+                        ),
+                    ),
+                ]);
+            } catch (e) {
+                throw new Error("WebSocket not open");
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const payload = { id, command, body };
+
+            const timer = setTimeout(() => {
+                if (this.pendingRequests.has(id))
+                    this.pendingRequests.delete(id);
+                reject(new Error("timeout"));
+            }, timeout);
+
+            // store handler that clears timer when invoked
+            this.pendingRequests.set(id, {
+                resolve: (data) => {
+                    clearTimeout(timer);
+                    resolve(data);
+                },
+                reject: (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                },
+            });
+
+            // send payload; send() logs and returns false if not connected
+            const ok = this.send(payload);
+            if (!ok) {
+                this.pendingRequests.delete(id);
+                clearTimeout(timer);
+                return reject(new Error("failed to send"));
+            }
+        });
     }
 
     send(data) {
-        if (this.connected && this.ws) {
-            this.ws.send(JSON.stringify(data));
-        } else {
-            console.error("WebSocket not connected");
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                const json = JSON.stringify(data);
+                console.debug("WebSocket send (ready):", json);
+                this.ws.send(json);
+                return true;
+            } catch (err) {
+                console.error("Failed to send via WebSocket:", err);
+                return false;
+            }
         }
+
+        console.error(
+            "WebSocket not open for send (aborted). readyState=",
+            this.ws ? this.ws.readyState : "no-ws",
+        );
+        return false;
     }
 
     sendAndWaitForResponse(payload, requestId, timeout = 5000) {
         return new Promise((resolve, reject) => {
-            // Set up timeout
-            const timeoutId = setTimeout(() => {
-                this.pendingRequests.delete(requestId);
-                reject(new Error(`Request ${requestId} timed out`));
-            }, timeout);
+            (async () => {
+                // If not connected, attempt one reconnect before failing
+                if (!this.connected || !this.ws) {
+                    console.warn(
+                        "Socket not connected, attempting reconnect...",
+                    );
+                    try {
+                        await this.connect();
+                        console.info("Reconnected WebSocket");
+                    } catch (e) {
+                        console.error("Reconnect attempt failed:", e);
+                        return reject(new Error("WebSocket not connected"));
+                    }
+                }
 
-            // Store resolver for this request
-            this.pendingRequests.set(requestId, {
-                resolve: (data) => {
-                    clearTimeout(timeoutId);
-                    resolve(data);
-                },
-                reject: (error) => {
-                    clearTimeout(timeoutId);
-                    reject(error);
-                },
-            });
+                const key = String(requestId);
+                // Ensure payload.id is the same string id (some callers may pass numeric)
+                payload.id = key;
 
-            this.send(payload);
+                // Set up timeout
+                const timeoutId = setTimeout(() => {
+                    this.pendingRequests.delete(key);
+                    reject(new Error(`Request ${requestId} timed out`));
+                }, timeout);
+
+                // Store resolver for this request
+                this.pendingRequests.set(key, {
+                    resolve: (data) => {
+                        clearTimeout(timeoutId);
+                        resolve(data);
+                    },
+                    reject: (error) => {
+                        clearTimeout(timeoutId);
+                        reject(error);
+                    },
+                });
+
+                const sent = this.send(payload);
+                if (!sent) {
+                    this.pendingRequests.delete(key);
+                    clearTimeout(timeoutId);
+                    return reject(new Error("Failed to send payload"));
+                }
+            })();
         });
     }
 
@@ -282,34 +465,43 @@ class ChatClient {
         try {
             const data = JSON.parse(rawData);
 
-            // Handle incoming chat messages
+            // Handle incoming chat messages via push event
             if (data.event === "message") {
-                this.addMessageToLocal(data.message);
+                const message = data.message;
+                this.addMessageToLocal(message);
                 if (this.onMessageReceived) {
-                    this.onMessageReceived(data.message);
+                    this.onMessageReceived(message);
                 }
                 return;
             }
 
-            // Handle list messages response
-            if (data.command === "listMessages" && data.messages) {
+            // Handle responses to our requests by ID
+            const respId =
+                data && (data.id || data.id === 0) ? String(data.id) : null;
+            if (respId && this.pendingRequests.has(respId)) {
+                const handler = this.pendingRequests.get(respId);
+                this.pendingRequests.delete(respId);
+
+                // Backend returns status: "failed" or "success"
+                if (data.status === "failed" || data.error) {
+                    handler.reject(
+                        new Error(
+                            data.message || data.error || "Request failed",
+                        ),
+                    );
+                } else {
+                    handler.resolve(data);
+                }
+                return;
+            }
+
+            // Handle listMessages response (might not have ID match)
+            if (data.status === "success" && Array.isArray(data.messages)) {
                 this.messages = data.messages;
                 if (this.onListMessagesReceived) {
                     this.onListMessagesReceived(data.messages);
                 }
                 return;
-            }
-
-            // Handle responses to our requests
-            if (data.id && this.pendingRequests.has(data.id)) {
-                const handler = this.pendingRequests.get(data.id);
-                this.pendingRequests.delete(data.id);
-
-                if (data.status === "failed" || data.error) {
-                    handler.reject(new Error(data.message || data.error));
-                } else {
-                    handler.resolve(data);
-                }
             }
         } catch (error) {
             console.error("Error handling message:", error);
