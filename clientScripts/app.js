@@ -154,6 +154,8 @@ async function handleLogin(event) {
             return;
         }
         console.log("Logged in as:", user.username);
+        // Persist saved user is already handled in loginUser; now ensure UI initialized
+        ui = new ChatUI(chat);
         showRoomUI();
     } catch (error) {
         alert("Login failed: " + error.message);
@@ -182,6 +184,7 @@ async function handleLogout() {
         console.warn("Error disconnecting:", e);
     }
 
+    if (ui && typeof ui.destroy === "function") ui.destroy();
     ui = null;
     showAuthUI();
 }
@@ -205,7 +208,7 @@ async function handleCreateRoom(event) {
         console.log("Room created:", room);
 
         // Initialize UI and load messages
-        ui = new ChatUI(chat);
+        if (!ui) ui = new ChatUI(chat);
         ui.updateRoomInfo(room);
 
         try {
@@ -246,7 +249,7 @@ async function handleJoinRoom(event) {
         console.log("Joined room:", room);
 
         // Initialize UI and load messages
-        ui = new ChatUI(chat);
+        if (!ui) ui = new ChatUI(chat);
         ui.updateRoomInfo(room);
 
         try {

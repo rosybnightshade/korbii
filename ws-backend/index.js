@@ -28,6 +28,8 @@ const server = app.listen(EX_PORT, () => {
 
 const wss = new WebSocketServer({ server });
 
+const DEBUG_PUSH = process.env.DEBUG_PUSH === "1";
+
 wss.on("connection", async (ws) => {
     console.log("Connection Established...");
     ws.userId = null;
@@ -113,23 +115,45 @@ wss.on("connection", async (ws) => {
                 });
                 if (msg && msg.conversationId) {
                     const push = { event: "message", message: msg };
+
+                    // Debug log
+                    console.log("sendMessage: created message:", msg);
+
+                    // Normal filtered broadcast
                     wss.clients.forEach((client) => {
-                        if (client && client.readyState === 1) {
-                            const clientRoom =
-                                client.currentRoom &&
-                                (client.currentRoom.id ||
-                                    client.currentRoom.code);
-                            if (
-                                clientRoom &&
-                                String(clientRoom) ===
-                                    String(msg.conversationId)
-                            ) {
-                                try {
+                        try {
+                            if (client && client.readyState === 1) {
+                                const clientRoom =
+                                    client.currentRoom &&
+                                    (client.currentRoom.id ||
+                                        client.currentRoom.code);
+                                if (
+                                    clientRoom &&
+                                    String(clientRoom) ===
+                                        String(msg.conversationId)
+                                ) {
                                     client.send(JSON.stringify(push));
-                                } catch (e) {}
+                                }
                             }
-                        }
+                        } catch (e) {}
                     });
+
+                    // If DEBUG_PUSH is enabled, also broadcast unfiltered to all clients for debugging
+                    if (DEBUG_PUSH) {
+                        wss.clients.forEach((client) => {
+                            try {
+                                if (client && client.readyState === 1) {
+                                    client.send(
+                                        JSON.stringify({
+                                            event: "message",
+                                            message: msg,
+                                            debug: true,
+                                        }),
+                                    );
+                                }
+                            } catch (e) {}
+                        });
+                    }
                 }
             }
 

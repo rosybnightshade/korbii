@@ -34,7 +34,7 @@ class ChatClient {
 
                 this.ws.onopen = () => {
                     this.connected = true;
-                    console.log("WebSocket connected");
+                    console.log("WebSocket connected", { url: this.wsUrl, readyState: this.ws.readyState });
                     if (this.onConnectionChange) this.onConnectionChange(true);
                     resolve();
                 };
@@ -52,7 +52,7 @@ class ChatClient {
 
                 this.ws.onclose = (event) => {
                     this.connected = false;
-                    console.log("WebSocket disconnected");
+                    console.log("WebSocket disconnected", { code: event.code, reason: event.reason });
                     if (this.onConnectionChange) this.onConnectionChange(false);
 
                     // Reject any pending requests so callers don't hang indefinitely
@@ -167,7 +167,12 @@ class ChatClient {
             // prefer id, fallback to code (match CLI behavior)
             this.currentRoomId = response.room.id || response.room.code;
             this.messages = [];
-            console.info("createRoom assigned currentRoomId", this.currentRoomId, "room=", response.room);
+            console.info(
+                "createRoom assigned currentRoomId",
+                this.currentRoomId,
+                "room=",
+                response.room,
+            );
             return response.room;
         }
 
@@ -191,7 +196,12 @@ class ChatClient {
             this.currentRoom = response.room;
             this.currentRoomId = response.room.id || response.room.code;
             this.messages = [];
-            console.info("joinRoom assigned currentRoomId", this.currentRoomId, "room=", response.room);
+            console.info(
+                "joinRoom assigned currentRoomId",
+                this.currentRoomId,
+                "room=",
+                response.room,
+            );
             return response.room;
         }
 
@@ -200,6 +210,206 @@ class ChatClient {
 
     getCurrentRoom() {
         return this.currentRoom;
+    }
+
+    // ==================== INTERNAL HELPERS ====================
+
+    generateRequestId() {
+        // Match CLI style: string id with timestamp + random suffix
+        return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    // New: consistent request sender (matches CLI): uses string id, checks readyState,
+    // sets per-request timeout and stores resolvers in pendingRequests.
+    async sendRequest(command, body = {}, timeout = 8000) {
+        // ensure websocket open
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            // attempt to connect (will resolve when open) or fail
+            try {
+                await Promise.race([
+                    this.connect(),
+                    new Promise((_, rej) =>
+                        setTimeout(
+                            () => rej(new Error("WS connect timeout")),
+                            timeout,
+                        ),
+                    ),
+                ]);
+            } catch (e) {
+                throw new Error("WebSocket not open");
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const payload = { id, command, body };
+
+            const timer = setTimeout(() => {
+                if (this.pendingRequests.has(id)) this.pendingRequests.delete(id);
+                reject(new Error("timeout"));
+            }, timeout);
+
+            // store handler that clears timer when invoked
+            this.pendingRequests.set(id, {
+                resolve: (data) => {
+                    clearTimeout(timer);
+                    resolve(data);
+                },
+                reject: (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                },
+            });
+
+            // send payload; send() logs and returns false if not connected
+            console.debug("sendRequest sending payload:", payload, "readyState=", this.ws ? this.ws.readyState : "no-ws");
+            let ok = false;
+            try {
+                ok = this.send(payload);
+            } catch (e) {
+                ok = false;
+            }
+
+            if (!ok) {
+                // attempt direct ws.send as a last-resort fallback
+                try {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        const json = JSON.stringify(payload);
+                        console.warn("sendRequest fallback: using direct ws.send", json);
+                        this.ws.send(json);
+                        ok = true;
+                    }
+                } catch (e) {
+                    console.error("sendRequest direct ws.send failed:", e);
+                    ok = false;
+                }
+            }
+
+            if (!ok) {
+                this.pendingRequests.delete(id);
+                clearTimeout(timer);
+                return reject(new Error("failed to send"));
+            }
+        });
+    }
+
+    send(data) {
+        const ready = this.ws ? this.ws.readyState : "no-ws";
+        console.debug(
+            "WebSocket send attempt, readyState=",
+            ready,
+            "data=",
+            data,
+        );
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                const json = JSON.stringify(data);
+                console.debug("WebSocket send (ready):", json);
+                this.ws.send(json);
+                return true;
+            } catch (err) {
+                console.error("Failed to send via WebSocket:", err);
+                return false;
+            }
+        }
+
+        console.error(
+            "WebSocket not open for send (aborted). readyState=",
+            this.ws ? this.ws.readyState : "no-ws",
+            "data=",
+            data,
+        );
+        return false;
+    }
+
+    sendAndWaitForResponse(payload, requestId, timeout = 5000) {
+        return new Promise((resolve, reject) => {
+            (async () => {
+                // If not connected, attempt one reconnect before failing
+                if (
+                    !this.connected ||
+                    !this.ws ||
+                    this.ws.readyState !== WebSocket.OPEN
+                ) {
+                    console.warn(
+                        "Socket not connected or not OPEN, attempting reconnect... readyState=",
+                        this.ws ? this.ws.readyState : "no-ws",
+                    );
+                    try {
+                        await Promise.race([
+                            this.connect(),
+                            new Promise((_, rej) =>
+                                setTimeout(
+                                    () => rej(new Error("WS connect timeout")),
+                                    timeout,
+                                ),
+                            ),
+                        ]);
+                        console.info("Reconnected WebSocket");
+                    } catch (e) {
+                        console.error("Reconnect attempt failed:", e);
+                        return reject(new Error("WebSocket not connected"));
+                    }
+                }
+
+                const key = String(requestId);
+                // Ensure payload.id is the same string id (some callers may pass numeric)
+                payload.id = key;
+
+                // Set up timeout
+                const timeoutId = setTimeout(() => {
+                    this.pendingRequests.delete(key);
+                    reject(new Error(`Request ${requestId} timed out`));
+                }, timeout);
+
+                // Store resolver for this request
+                this.pendingRequests.set(key, {
+                    resolve: (data) => {
+                        clearTimeout(timeoutId);
+                        resolve(data);
+                    },
+                    reject: (error) => {
+                        clearTimeout(timeoutId);
+                        reject(error);
+                    },
+                });
+
+                // Attempt to send; if send fails try one more reconnect/send before failing
+                let sent = false;
+                try {
+                    sent = this.send(payload);
+                } catch (e) {
+                    sent = false;
+                }
+
+                if (!sent) {
+                    console.warn(
+                        "Initial send failed for payload, attempting reconnect+send...",
+                    );
+                    try {
+                        await this.connect();
+                    } catch (e) {
+                        this.pendingRequests.delete(key);
+                        clearTimeout(timeoutId);
+                        return reject(
+                            new Error("Failed to reconnect for send"),
+                        );
+                    }
+                    // try sending again
+                    try {
+                        sent = this.send(payload);
+                    } catch (e) {
+                        sent = false;
+                    }
+                }
+
+                if (!sent) {
+                    this.pendingRequests.delete(key);
+                    clearTimeout(timeoutId);
+                    return reject(new Error("Failed to send payload"));
+                }
+            })();
+        });
     }
 
     // ==================== MESSAGING ====================
@@ -212,22 +422,38 @@ class ChatClient {
             currentRoomId: this.currentRoomId,
         });
 
+        // Ensure socket is open before proceeding
+        const okConn = await this.ensureConnected(5000);
+        if (!okConn) {
+            console.error("Unable to ensure websocket connection before send");
+            return null;
+        }
+
         // Attempt to recover userId from localStorage if missing
         if (!this.userId) {
             const stored = this.restoreUserFromLocalStorage();
             if (stored) {
-                console.info("Recovered user from localStorage", stored.username);
+                console.info(
+                    "Recovered user from localStorage",
+                    stored.username,
+                );
             }
         }
 
         // Attempt to recover currentRoomId from session storage if missing
         if (!this.currentRoomId) {
             try {
-                const sess = JSON.parse(localStorage.getItem("chatSession") || "null");
+                const sess = JSON.parse(
+                    localStorage.getItem("chatSession") || "null",
+                );
                 if (sess && sess.currentRoom) {
                     this.currentRoom = sess.currentRoom;
-                    this.currentRoomId = sess.currentRoom.id || sess.currentRoom.code;
-                    console.info("Recovered current room from session", this.currentRoom);
+                    this.currentRoomId =
+                        sess.currentRoom.id || sess.currentRoom.code;
+                    console.info(
+                        "Recovered current room from session",
+                        this.currentRoom,
+                    );
                 }
             } catch (e) {
                 // ignore
@@ -251,18 +477,36 @@ class ChatClient {
             id: requestId,
             body: {
                 content: text,
-                conversationId: this.currentRoomId || (this.currentRoom && (this.currentRoom.id || this.currentRoom.code)),
+                conversationId:
+                    this.currentRoomId ||
+                    (this.currentRoom &&
+                        (this.currentRoom.id || this.currentRoom.code)),
                 senderId: this.userId,
             },
         };
 
+        console.debug("Prepared sendMessage payload:", payload);
+
         try {
-            const response = await this.sendAndWaitForResponse(
-                payload,
-                requestId,
-            );
+            // Use sendRequest to send the command via the consistent request path
+            const response = await this.sendRequest("sendMessage", payload.body, 5000);
             console.debug("sendMessage response:", response);
             if (response && response.status === "success") {
+                // If server returned the created message, append it and notify UI listeners
+                const msg = response.message || response.msg || null;
+                if (msg) {
+                    this.addMessageToLocal(msg);
+                    if (this.onMessageReceived) {
+                        try {
+                            this.onMessageReceived(msg);
+                        } catch (e) {
+                            console.error(
+                                "onMessageReceived handler threw:",
+                                e,
+                            );
+                        }
+                    }
+                }
                 return response;
             }
             console.warn("sendMessage did not succeed, response:", response);
@@ -272,6 +516,8 @@ class ChatClient {
             return null;
         }
     }
+
+    // ==================== MESSAGE LISTING ====================
 
     async listMessages(limit = 50, offset = 0) {
         const requestId = this.generateRequestId();
@@ -310,174 +556,72 @@ class ChatClient {
             },
         };
 
-        const response = await this.sendAndWaitForResponse(payload, requestId);
-
-        if (
-            response &&
-            response.status === "success" &&
-            Array.isArray(response.messages)
-        ) {
-            this.messages = response.messages;
-            return response.messages;
+        try {
+            const response = await this.sendAndWaitForResponse(payload, requestId);
+            if (response && response.status === "success" && Array.isArray(response.messages)) {
+                // server returns newest-first; reverse to chronological order
+                const messages = response.messages.slice().reverse();
+                this.messages = messages;
+                if (this.onListMessagesReceived) {
+                    try {
+                        this.onListMessagesReceived(messages);
+                    } catch (e) {
+                        console.error("onListMessagesReceived handler error:", e);
+                    }
+                }
+                return messages;
+            }
+        } catch (e) {
+            console.error("listMessages error:", e);
         }
 
         return [];
     }
 
-    addMessageToLocal(message) {
-        this.messages.push(message);
-    }
-
-    getMessages() {
-        return this.messages;
-    }
-
-    // ==================== INTERNAL HELPERS ====================
-
-    generateRequestId() {
-        // Match CLI style: string id with timestamp + random suffix
-        return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    }
-
-    // New: consistent request sender (matches CLI): uses string id, checks readyState,
-    // sets per-request timeout and stores resolvers in pendingRequests.
-    async sendRequest(command, body = {}, timeout = 8000) {
-        // ensure websocket open
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            // attempt to connect (will resolve when open) or fail
-            try {
-                await Promise.race([
-                    this.connect(),
-                    new Promise((_, rej) =>
-                        setTimeout(
-                            () => rej(new Error("WS connect timeout")),
-                            timeout,
-                        ),
-                    ),
-                ]);
-            } catch (e) {
-                throw new Error("WebSocket not open");
-            }
+    // Ensure websocket connection is open (awaits connect if needed)
+    async ensureConnected(timeout = 5000) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.connected) return true;
+        try {
+            await Promise.race([
+                this.connect(),
+                new Promise((_, rej) => setTimeout(() => rej(new Error("WS connect timeout")), timeout)),
+            ]);
+            return true;
+        } catch (e) {
+            console.error("ensureConnected failed:", e);
+            return false;
         }
-
-        return new Promise((resolve, reject) => {
-            const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const payload = { id, command, body };
-
-            const timer = setTimeout(() => {
-                if (this.pendingRequests.has(id))
-                    this.pendingRequests.delete(id);
-                reject(new Error("timeout"));
-            }, timeout);
-
-            // store handler that clears timer when invoked
-            this.pendingRequests.set(id, {
-                resolve: (data) => {
-                    clearTimeout(timer);
-                    resolve(data);
-                },
-                reject: (err) => {
-                    clearTimeout(timer);
-                    reject(err);
-                },
-            });
-
-            // send payload; send() logs and returns false if not connected
-            const ok = this.send(payload);
-            if (!ok) {
-                this.pendingRequests.delete(id);
-                clearTimeout(timer);
-                return reject(new Error("failed to send"));
-            }
-        });
     }
 
-    send(data) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            try {
-                const json = JSON.stringify(data);
-                console.debug("WebSocket send (ready):", json);
-                this.ws.send(json);
-                return true;
-            } catch (err) {
-                console.error("Failed to send via WebSocket:", err);
-                return false;
-            }
-        }
-
-        console.error(
-            "WebSocket not open for send (aborted). readyState=",
-            this.ws ? this.ws.readyState : "no-ws",
-        );
-        return false;
-    }
-
-    sendAndWaitForResponse(payload, requestId, timeout = 5000) {
-        return new Promise((resolve, reject) => {
-            (async () => {
-                // If not connected, attempt one reconnect before failing
-                if (!this.connected || !this.ws) {
-                    console.warn(
-                        "Socket not connected, attempting reconnect...",
-                    );
-                    try {
-                        await this.connect();
-                        console.info("Reconnected WebSocket");
-                    } catch (e) {
-                        console.error("Reconnect attempt failed:", e);
-                        return reject(new Error("WebSocket not connected"));
-                    }
-                }
-
-                const key = String(requestId);
-                // Ensure payload.id is the same string id (some callers may pass numeric)
-                payload.id = key;
-
-                // Set up timeout
-                const timeoutId = setTimeout(() => {
-                    this.pendingRequests.delete(key);
-                    reject(new Error(`Request ${requestId} timed out`));
-                }, timeout);
-
-                // Store resolver for this request
-                this.pendingRequests.set(key, {
-                    resolve: (data) => {
-                        clearTimeout(timeoutId);
-                        resolve(data);
-                    },
-                    reject: (error) => {
-                        clearTimeout(timeoutId);
-                        reject(error);
-                    },
-                });
-
-                const sent = this.send(payload);
-                if (!sent) {
-                    this.pendingRequests.delete(key);
-                    clearTimeout(timeoutId);
-                    return reject(new Error("Failed to send payload"));
-                }
-            })();
-        });
-    }
-
+    // Handle incoming websocket messages (pushes and responses)
     handleMessage(rawData) {
         try {
             const data = JSON.parse(rawData);
 
             // Handle incoming chat messages via push event
             if (data.event === "message") {
+                console.debug("push message received:", data);
                 const message = data.message;
+                const msgConv =
+                    message && (message.conversationId || message.conversation_id || message.conversation || null);
+                const currConv =
+                    this.currentRoomId || (this.currentRoom && (this.currentRoom.id || this.currentRoom.code));
+                if (!currConv || String(msgConv) !== String(currConv)) {
+                    return; // ignore messages for other conversations
+                }
                 this.addMessageToLocal(message);
                 if (this.onMessageReceived) {
-                    this.onMessageReceived(message);
+                    try {
+                        this.onMessageReceived(message);
+                    } catch (e) {
+                        console.error("onMessageReceived handler threw:", e);
+                    }
                 }
                 return;
             }
 
             // Handle responses to our requests by ID
-            const respId =
-                data && (data.id || data.id === 0) ? String(data.id) : null;
+            const respId = data && (data.id || data.id === 0) ? String(data.id) : null;
             if (respId && this.pendingRequests.has(respId)) {
                 const handler = this.pendingRequests.get(respId);
                 this.pendingRequests.delete(respId);
@@ -497,9 +641,15 @@ class ChatClient {
 
             // Handle listMessages response (might not have ID match)
             if (data.status === "success" && Array.isArray(data.messages)) {
-                this.messages = data.messages;
+                // server may return newest-first; normalize to chronological
+                const messages = data.messages.slice().reverse();
+                this.messages = messages;
                 if (this.onListMessagesReceived) {
-                    this.onListMessagesReceived(data.messages);
+                    try {
+                        this.onListMessagesReceived(messages);
+                    } catch (e) {
+                        console.error("onListMessagesReceived handler error:", e);
+                    }
                 }
                 return;
             }
