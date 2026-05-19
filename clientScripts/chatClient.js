@@ -25,6 +25,14 @@ class ChatClient {
         this.onListMessagesReceived = null;
     }
 
+    addMessageToLocal(message) {
+        if (!message || !message.id) return false;
+        const exists = this.messages.some((m) => m && m.id === message.id);
+        if (exists) return false;
+        this.messages.push(message);
+        return true;
+    }
+
     // ==================== CONNECTION ====================
 
     connect() {
@@ -34,7 +42,10 @@ class ChatClient {
 
                 this.ws.onopen = () => {
                     this.connected = true;
-                    console.log("WebSocket connected", { url: this.wsUrl, readyState: this.ws.readyState });
+                    console.log("WebSocket connected", {
+                        url: this.wsUrl,
+                        readyState: this.ws.readyState,
+                    });
                     if (this.onConnectionChange) this.onConnectionChange(true);
                     resolve();
                 };
@@ -52,7 +63,10 @@ class ChatClient {
 
                 this.ws.onclose = (event) => {
                     this.connected = false;
-                    console.log("WebSocket disconnected", { code: event.code, reason: event.reason });
+                    console.log("WebSocket disconnected", {
+                        code: event.code,
+                        reason: event.reason,
+                    });
                     if (this.onConnectionChange) this.onConnectionChange(false);
 
                     // Reject any pending requests so callers don't hang indefinitely
@@ -245,7 +259,8 @@ class ChatClient {
             const payload = { id, command, body };
 
             const timer = setTimeout(() => {
-                if (this.pendingRequests.has(id)) this.pendingRequests.delete(id);
+                if (this.pendingRequests.has(id))
+                    this.pendingRequests.delete(id);
                 reject(new Error("timeout"));
             }, timeout);
 
@@ -262,7 +277,12 @@ class ChatClient {
             });
 
             // send payload; send() logs and returns false if not connected
-            console.debug("sendRequest sending payload:", payload, "readyState=", this.ws ? this.ws.readyState : "no-ws");
+            console.debug(
+                "sendRequest sending payload:",
+                payload,
+                "readyState=",
+                this.ws ? this.ws.readyState : "no-ws",
+            );
             let ok = false;
             try {
                 ok = this.send(payload);
@@ -275,7 +295,10 @@ class ChatClient {
                 try {
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                         const json = JSON.stringify(payload);
-                        console.warn("sendRequest fallback: using direct ws.send", json);
+                        console.warn(
+                            "sendRequest fallback: using direct ws.send",
+                            json,
+                        );
                         this.ws.send(json);
                         ok = true;
                     }
@@ -425,8 +448,7 @@ class ChatClient {
         // Ensure socket is open before proceeding
         const okConn = await this.ensureConnected(5000);
         if (!okConn) {
-            console.error("Unable to ensure websocket connection before send");
-            return null;
+            throw new Error("Unable to connect to chat server");
         }
 
         // Attempt to recover userId from localStorage if missing
@@ -461,13 +483,11 @@ class ChatClient {
         }
 
         if (!this.userId) {
-            console.error("Not logged in");
-            return null;
+            throw new Error("Not logged in");
         }
 
         if (!this.currentRoomId) {
-            console.error("Not in a room");
-            return null;
+            throw new Error("Not in a room");
         }
 
         const requestId = this.generateRequestId();
@@ -489,50 +509,59 @@ class ChatClient {
 
         try {
             // Use sendRequest to send the command via the consistent request path
-            const response = await this.sendRequest("sendMessage", payload.body, 5000);
+            const response = await this.sendRequest(
+                "sendMessage",
+                payload.body,
+                5000,
+            );
             console.debug("sendMessage response:", response);
             if (response && response.status === "success") {
-                // If server returned the created message, append it and notify UI listeners
+                // Add immediately from ack for fast local feedback; push will be deduped.
                 const msg = response.message || response.msg || null;
-                if (msg) {
-                    this.addMessageToLocal(msg);
-                    if (this.onMessageReceived) {
-                        try {
-                            this.onMessageReceived(msg);
-                        } catch (e) {
-                            console.error(
-                                "onMessageReceived handler threw:",
-                                e,
-                            );
-                        }
+                const added = this.addMessageToLocal(msg);
+                if (msg && added && this.onMessageReceived) {
+                    try {
+                        this.onMessageReceived(msg);
+                    } catch (e) {
+                        console.error("onMessageReceived handler threw:", e);
                     }
                 }
                 return response;
             }
-            console.warn("sendMessage did not succeed, response:", response);
-            return null;
+            throw new Error(
+                (response && response.message) || "sendMessage did not succeed",
+            );
         } catch (err) {
             console.error("sendMessage error:", err);
-            return null;
+            throw err;
         }
     }
 
     // ==================== MESSAGE LISTING ====================
 
-    async listMessages(limit = 50, offset = 0) {
+    async listMessages(conversationId = null, limit = 50, offset = 0) {
         const requestId = this.generateRequestId();
 
         // ensure conversation id is available
-        let conv = this.currentRoomId || (this.currentRoom && (this.currentRoom.id || this.currentRoom.code));
+        let conv =
+            conversationId ||
+            this.currentRoomId ||
+            (this.currentRoom &&
+                (this.currentRoom.id || this.currentRoom.code));
         if (!conv) {
             try {
-                const sess = JSON.parse(localStorage.getItem("chatSession") || "null");
+                const sess = JSON.parse(
+                    localStorage.getItem("chatSession") || "null",
+                );
                 if (sess && sess.currentRoom) {
                     conv = sess.currentRoom.id || sess.currentRoom.code;
                     // also set runtime state
                     this.currentRoom = sess.currentRoom;
                     this.currentRoomId = conv;
-                    console.info("listMessages recovered conversationId from session", conv);
+                    console.info(
+                        "listMessages recovered conversationId from session",
+                        conv,
+                    );
                 }
             } catch (e) {
                 // ignore
@@ -540,11 +569,20 @@ class ChatClient {
         }
 
         if (!conv) {
-            console.error("listMessages: no conversationId available, aborting request");
+            console.error(
+                "listMessages: no conversationId available, aborting request",
+            );
             return [];
         }
 
-        console.debug("listMessages called, conversationId=", conv, "limit=", limit, "offset=", offset);
+        console.debug(
+            "listMessages called, conversationId=",
+            conv,
+            "limit=",
+            limit,
+            "offset=",
+            offset,
+        );
 
         const payload = {
             command: "listMessages",
@@ -557,8 +595,15 @@ class ChatClient {
         };
 
         try {
-            const response = await this.sendAndWaitForResponse(payload, requestId);
-            if (response && response.status === "success" && Array.isArray(response.messages)) {
+            const response = await this.sendAndWaitForResponse(
+                payload,
+                requestId,
+            );
+            if (
+                response &&
+                response.status === "success" &&
+                Array.isArray(response.messages)
+            ) {
                 // server returns newest-first; reverse to chronological order
                 const messages = response.messages.slice().reverse();
                 this.messages = messages;
@@ -566,7 +611,10 @@ class ChatClient {
                     try {
                         this.onListMessagesReceived(messages);
                     } catch (e) {
-                        console.error("onListMessagesReceived handler error:", e);
+                        console.error(
+                            "onListMessagesReceived handler error:",
+                            e,
+                        );
                     }
                 }
                 return messages;
@@ -580,11 +628,17 @@ class ChatClient {
 
     // Ensure websocket connection is open (awaits connect if needed)
     async ensureConnected(timeout = 5000) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.connected) return true;
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.connected)
+            return true;
         try {
             await Promise.race([
                 this.connect(),
-                new Promise((_, rej) => setTimeout(() => rej(new Error("WS connect timeout")), timeout)),
+                new Promise((_, rej) =>
+                    setTimeout(
+                        () => rej(new Error("WS connect timeout")),
+                        timeout,
+                    ),
+                ),
             ]);
             return true;
         } catch (e) {
@@ -603,14 +657,20 @@ class ChatClient {
                 console.debug("push message received:", data);
                 const message = data.message;
                 const msgConv =
-                    message && (message.conversationId || message.conversation_id || message.conversation || null);
+                    message &&
+                    (message.conversationId ||
+                        message.conversation_id ||
+                        message.conversation ||
+                        null);
                 const currConv =
-                    this.currentRoomId || (this.currentRoom && (this.currentRoom.id || this.currentRoom.code));
+                    this.currentRoomId ||
+                    (this.currentRoom &&
+                        (this.currentRoom.id || this.currentRoom.code));
                 if (!currConv || String(msgConv) !== String(currConv)) {
                     return; // ignore messages for other conversations
                 }
-                this.addMessageToLocal(message);
-                if (this.onMessageReceived) {
+                const added = this.addMessageToLocal(message);
+                if (added && this.onMessageReceived) {
                     try {
                         this.onMessageReceived(message);
                     } catch (e) {
@@ -621,7 +681,8 @@ class ChatClient {
             }
 
             // Handle responses to our requests by ID
-            const respId = data && (data.id || data.id === 0) ? String(data.id) : null;
+            const respId =
+                data && (data.id || data.id === 0) ? String(data.id) : null;
             if (respId && this.pendingRequests.has(respId)) {
                 const handler = this.pendingRequests.get(respId);
                 this.pendingRequests.delete(respId);
@@ -648,7 +709,10 @@ class ChatClient {
                     try {
                         this.onListMessagesReceived(messages);
                     } catch (e) {
-                        console.error("onListMessagesReceived handler error:", e);
+                        console.error(
+                            "onListMessagesReceived handler error:",
+                            e,
+                        );
                     }
                 }
                 return;

@@ -11,7 +11,8 @@ class ChatUI {
                 const nodes = document.querySelectorAll(sel);
                 for (const n of nodes) {
                     // visible if it has layout or is not hidden
-                    if (n && n.getClientRects && n.getClientRects().length > 0) return n;
+                    if (n && n.getClientRects && n.getClientRects().length > 0)
+                        return n;
                     if (n && n.offsetParent !== null) return n;
                     // also accept if it's inside #chat-screen which may be the visible container
                 }
@@ -20,14 +21,23 @@ class ChatUI {
             return document.querySelector(sel);
         };
 
-        this.chatbox = findVisible('#chatbox') || document.getElementById('chatbox');
-        this.chatboxDetails = findVisible('#chatbox-details') || document.getElementById('chatbox-details');
-        this.chatboxRoomname = findVisible('#chatbox-details-roomname') || document.getElementById('chatbox-details-roomname');
-        this.chatboxRoomcode = findVisible('#chatbox-details-roomcode') || document.getElementById('chatbox-details-roomcode');
-        this.chatboxChats = findVisible('#chatbox-chats') || document.getElementById('chatbox-chats');
+        this.chatbox =
+            findVisible("#chatbox") || document.getElementById("chatbox");
+        this.chatboxDetails =
+            findVisible("#chatbox-details") ||
+            document.getElementById("chatbox-details");
+        this.chatboxRoomname =
+            findVisible("#chatbox-details-roomname") ||
+            document.getElementById("chatbox-details-roomname");
+        this.chatboxRoomcode =
+            findVisible("#chatbox-details-roomcode") ||
+            document.getElementById("chatbox-details-roomcode");
+        this.chatboxChats =
+            findVisible("#chatbox-chats") ||
+            document.getElementById("chatbox-chats");
         // Defer input/button creation to ensureVisibleInput (so we always create them inside visible chat-screen)
-        this.chatboxInput = findVisible('#chatbox-input-input') || null;
-        this.chatboxBtn = findVisible('#chatbox-input-btn') || null;
+        this.chatboxInput = findVisible("#chatbox-input-input") || null;
+        this.chatboxBtn = findVisible("#chatbox-input-btn") || null;
 
         // Set up chat client callbacks first
         this.setupChatCallbacks();
@@ -36,7 +46,11 @@ class ChatUI {
         this.setupEventListeners();
 
         // Ensure visible input exists (creates input/button inside visible chat-screen if needed)
-        try { this.ensureVisibleInput(); } catch (e) { /* ignore */ }
+        try {
+            this.ensureVisibleInput();
+        } catch (e) {
+            /* ignore */
+        }
     }
 
     setupEventListeners() {
@@ -221,7 +235,9 @@ class ChatUI {
                                 msgs.forEach((m) => this.addMessageToUI(m));
                             }
                         })
-                        .catch((err) => console.warn("listMessages failed:", err));
+                        .catch((err) =>
+                            console.warn("listMessages failed:", err),
+                        );
                 } else if (Array.isArray(maybePromise)) {
                     // synchronous return
                     this.clearMessages();
@@ -235,106 +251,143 @@ class ChatUI {
 
     // Helper: reliably find the visible #chatbox element (handles duplicate IDs)
     getVisibleChatbox() {
+        const chatScreen = document.getElementById("chat-screen");
+        if (chatScreen && !chatScreen.classList.contains("hidden")) {
+            const activeBox = chatScreen.querySelector("#chatbox");
+            if (activeBox) return activeBox;
+        }
+
         try {
-            const nodes = document.querySelectorAll('#chatbox');
+            const nodes = document.querySelectorAll("#chatbox");
             for (const n of nodes) {
                 if (!n) continue;
                 try {
-                    if (n.getClientRects && n.getClientRects().length > 0) return n;
+                    if (n.getClientRects && n.getClientRects().length > 0)
+                        return n;
                     if (n.offsetParent !== null) return n;
                 } catch (e) {}
             }
         } catch (e) {}
         // fallbacks
-        return document.querySelector('#chat-screen #chatbox') || document.querySelector('#chatbox');
+        return (
+            document.querySelector("#chat-screen #chatbox") ||
+            document.querySelector("#chatbox")
+        );
+    }
+
+    getActiveInputElements() {
+        const inActiveScreen = document.querySelector(
+            "#chat-screen:not(.hidden) #chatbox-input-input",
+        );
+        const btnInActiveScreen = document.querySelector(
+            "#chat-screen:not(.hidden) #chatbox-input-btn",
+        );
+
+        if (inActiveScreen) {
+            return {
+                input: inActiveScreen,
+                button: btnInActiveScreen || this.chatboxBtn,
+            };
+        }
+
+        return {
+            input: this.chatboxInput,
+            button: this.chatboxBtn,
+        };
     }
 
     // Ensure an input+button exist inside the visible #chat-screen #chatbox
     ensureVisibleInput() {
         // Prefer the chatbox inside the visible chat-screen
         const visibleBox = this.getVisibleChatbox();
-         if (!visibleBox) return;
+        if (!visibleBox) return;
 
-         let inputWrapper = visibleBox.querySelector("#chatbox-input");
-         if (!inputWrapper) {
-             inputWrapper = document.createElement("div");
-             inputWrapper.id = "chatbox-input";
-             inputWrapper.style.display = "flex";
-             inputWrapper.style.gap = "8px";
-             inputWrapper.style.marginTop = "8px";
-             visibleBox.appendChild(inputWrapper);
-         }
+        let inputWrapper = visibleBox.querySelector("#chatbox-input");
+        if (!inputWrapper) {
+            inputWrapper = document.createElement("div");
+            inputWrapper.id = "chatbox-input";
+            inputWrapper.style.display = "flex";
+            inputWrapper.style.gap = "8px";
+            inputWrapper.style.marginTop = "8px";
+            visibleBox.appendChild(inputWrapper);
+        }
 
-         // If elements already exist in visibleBox, use them
-         let inp = inputWrapper.querySelector("#chatbox-input-input");
-         let btn = inputWrapper.querySelector("#chatbox-input-btn");
+        // If elements already exist in visibleBox, use them
+        let inp = inputWrapper.querySelector("#chatbox-input-input");
+        let btn = inputWrapper.querySelector("#chatbox-input-btn");
 
-         // If not, create fresh ones (do not reuse inputs from hidden boxes)
-         if (!inp) {
-             inp = document.createElement("input");
-             inp.id = "chatbox-input-input";
-             inp.type = "text";
-             inp.placeholder = "Type your message here...";
-             inp.style.flex = "1";
-             inputWrapper.appendChild(inp);
-         }
-         if (!btn) {
-             btn = document.createElement("button");
-             btn.id = "chatbox-input-btn";
-             btn.textContent = "send";
-             inputWrapper.appendChild(btn);
-         }
+        // If not, create fresh ones (do not reuse inputs from hidden boxes)
+        if (!inp) {
+            inp = document.createElement("input");
+            inp.id = "chatbox-input-input";
+            inp.type = "text";
+            inp.placeholder = "Type your message here...";
+            inp.style.flex = "1";
+            inputWrapper.appendChild(inp);
+        }
+        if (!btn) {
+            btn = document.createElement("button");
+            btn.id = "chatbox-input-btn";
+            btn.textContent = "send";
+            inputWrapper.appendChild(btn);
+        }
 
-         // Replace references and bind direct listeners (avoid double-binding by removing any existing)
-         this.chatboxInput = inp;
-         this.chatboxBtn = btn;
+        // Replace references and bind direct listeners (avoid double-binding by removing any existing)
+        this.chatboxInput = inp;
+        this.chatboxBtn = btn;
 
-         // Remove previous direct listeners by cloning node (cheap way)
-         const newInp = this.chatboxInput.cloneNode(true);
-         this.chatboxInput.parentNode.replaceChild(newInp, this.chatboxInput);
-         this.chatboxInput = newInp;
-         const newBtn = this.chatboxBtn.cloneNode(true);
-         this.chatboxBtn.parentNode.replaceChild(newBtn, this.chatboxBtn);
-         this.chatboxBtn = newBtn;
+        // Remove previous direct listeners by cloning node (cheap way)
+        const newInp = this.chatboxInput.cloneNode(true);
+        this.chatboxInput.parentNode.replaceChild(newInp, this.chatboxInput);
+        this.chatboxInput = newInp;
+        const newBtn = this.chatboxBtn.cloneNode(true);
+        this.chatboxBtn.parentNode.replaceChild(newBtn, this.chatboxBtn);
+        this.chatboxBtn = newBtn;
 
-         // Bind direct handlers
-         this.chatboxBtn.addEventListener("click", () => this.handleSendMessage());
-         this.chatboxInput.addEventListener("keypress", (e) => {
-             if (e.key === "Enter" && !e.shiftKey) {
-                 e.preventDefault();
-                 this.handleSendMessage();
-             }
-         });
-     }
+        // Bind direct handlers
+        this.chatboxBtn.addEventListener("click", () =>
+            this.handleSendMessage(),
+        );
+        this.chatboxInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                this.handleSendMessage();
+            }
+        });
+    }
 
     // ==================== SEND MESSAGE ====================
 
     async handleSendMessage() {
-        if (!this.chatboxInput) return;
+        const { input, button } = this.getActiveInputElements();
+        if (!input) return;
 
-        const text = this.chatboxInput.value.trim();
+        this.chatboxInput = input;
+        if (button) this.chatboxBtn = button;
+
+        const text = input.value.trim();
 
         if (!text) {
             return;
         }
 
         // Disable input while sending
-        this.chatboxInput.disabled = true;
-        if (this.chatboxBtn) this.chatboxBtn.disabled = true;
+        input.disabled = true;
+        if (button) button.disabled = true;
 
         try {
             await this.chat.sendMessage(text);
             // Clear input on success
-            this.chatboxInput.value = "";
+            input.value = "";
         } catch (error) {
             console.error("Failed to send message:", error);
             this.showError("Failed to send message");
         } finally {
             // Re-enable input
-            this.chatboxInput.disabled = false;
-            if (this.chatboxBtn) this.chatboxBtn.disabled = false;
+            input.disabled = false;
+            if (button) button.disabled = false;
             try {
-                this.chatboxInput.focus();
+                input.focus();
             } catch (e) {}
         }
     }

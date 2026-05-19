@@ -44,12 +44,25 @@ async function initApp() {
             if (session && session.currentRoom) {
                 console.log("Restored room:", session.currentRoom.name);
                 chat.currentRoom = session.currentRoom;
-                chat.currentRoomId = Number(session.currentRoom.id);
+                chat.currentRoomId =
+                    session.currentRoom.id || session.currentRoom.code;
+
+                // Rejoin on each new socket so backend can push realtime messages.
+                if (session.currentRoom.code) {
+                    const rejoined = await chat.joinRoom(
+                        session.currentRoom.code,
+                    );
+                    if (rejoined) {
+                        chat.currentRoom = rejoined;
+                        chat.currentRoomId = rejoined.id || rejoined.code;
+                        await setSession({ currentRoom: rejoined });
+                    }
+                }
 
                 // Load message history and show chat
                 try {
                     ui = new ChatUI(chat);
-                    ui.updateRoomInfo(session.currentRoom);
+                    ui.updateRoomInfo(chat.currentRoom || session.currentRoom);
                     await chat.listMessages();
                 } catch (e) {
                     console.log("Failed to load room:", e.message);
@@ -99,6 +112,12 @@ function showChatUI() {
         ui = new ChatUI(chat);
         if (chat.currentRoom) {
             ui.updateRoomInfo(chat.currentRoom);
+        }
+    } else {
+        try {
+            ui.ensureVisibleInput();
+        } catch (e) {
+            console.warn("Failed to bind visible chat input:", e);
         }
     }
 }

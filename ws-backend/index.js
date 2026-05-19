@@ -1,7 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import bodyParser from "body-parser";
-import cors from "cors";
 
 import { WebSocketServer } from "ws";
 
@@ -13,13 +11,12 @@ import {
 } from "./routes/socket.js";
 import { sendMessage, listMessages } from "./routes/messages.js";
 
-const WS_PORT = 8800;
 const EX_PORT = 5500;
 
 const app = express();
 
 app.get("/", async (req, res) => {
-    return res.send(JSON.stringify(await createChatServer()) + "hi");
+    return res.json({ status: "ok" });
 });
 
 const server = app.listen(EX_PORT, () => {
@@ -42,7 +39,7 @@ wss.on("connection", async (ws) => {
                 : unprocessedData;
             const data = JSON.parse(stringData);
 
-            if (data.command == "createRoom") {
+            if (data.command === "createRoom") {
                 if (!data.body.roomname) {
                     ws.send(
                         JSON.stringify({
@@ -68,7 +65,7 @@ wss.on("connection", async (ws) => {
                     };
             }
 
-            if (data.command == "joinRoom") {
+            if (data.command === "joinRoom") {
                 if (!data.body.roomcode) {
                     ws.send(
                         JSON.stringify({
@@ -92,7 +89,7 @@ wss.on("connection", async (ws) => {
                     };
             }
 
-            if (data.command == "register") {
+            if (data.command === "register") {
                 const user = await registerUser(ws, {
                     id: data.id,
                     ...(data.body || {}),
@@ -100,7 +97,7 @@ wss.on("connection", async (ws) => {
                 if (user && user.id) ws.userId = user.id;
             }
 
-            if (data.command == "login") {
+            if (data.command === "login") {
                 const user = await loginUser(ws, {
                     id: data.id,
                     ...(data.body || {}),
@@ -108,12 +105,15 @@ wss.on("connection", async (ws) => {
                 if (user && user.id) ws.userId = user.id;
             }
 
-            if (data.command == "sendMessage") {
+            if (data.command === "sendMessage") {
                 const msg = await sendMessage(ws, {
                     id: data.id,
                     ...(data.body || {}),
                 });
                 if (msg && msg.conversationId) {
+                    ws.currentRoom = ws.currentRoom || {};
+                    ws.currentRoom.id = msg.conversationId;
+
                     const push = { event: "message", message: msg };
 
                     // Debug log
@@ -157,7 +157,12 @@ wss.on("connection", async (ws) => {
                 }
             }
 
-            if (data.command == "listMessages") {
+            if (data.command === "listMessages") {
+                const roomFromRequest = data.body && data.body.conversationId;
+                if (roomFromRequest) {
+                    ws.currentRoom = ws.currentRoom || {};
+                    ws.currentRoom.id = roomFromRequest;
+                }
                 await listMessages(ws, { id: data.id, ...(data.body || {}) });
             }
         } catch (error) {
